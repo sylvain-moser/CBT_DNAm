@@ -1,0 +1,164 @@
+---
+title: "KLF16_expression_CBT_profile"
+author: "Sylvain Moser"
+date: "2/2/2021"
+output: 
+  html_document:
+    code_folding: hide
+params:
+  expression_df: !r NULL
+  pheno: !r NULL
+  illu_annot: !r NULL
+---
+
+```{r}
+prefix_statgen=ifelse(file.exists("/psycl/g/mpsstatgen/symo/dummy_file.txt"),"/psycl/g/mpsstatgen/symo/anxiety_methylation/","/Users/sylvain_moser/anxiety_methylation/")
+```
+
+```{r}
+library(dplyr)
+```
+
+# Find the probes annotated to the KLF16 gene:
+
+```{r,warning=FALSE,message=F}
+genes_to_probe=function(genesSymbol){
+  library(illuminaHumanv4.db)
+  genes_to_probe_df=as.data.frame(select(illuminaHumanv4.db, 
+         keys = genesSymbol, 
+         columns=c("SYMBOL","PROBEID"), 
+         keytype="SYMBOL"))
+  return(as.vector(genes_to_probe_df %>% pull (PROBEID)))
+}
+```
+
+```{r,message=FALSE,warning=FALSE}
+print(genes_to_probe("KLF16"))
+```
+
+# Gene expression profile using the residuals after regressing out the immune cell-types:
+
+```{r}
+exp_df=readRDS(params$expression_df)
+
+exposure_ID=exp_df %>% filter(Timepoint %in% c("b1","pe1","p24_1")) %>% pull(NID)
+```
+
+
+## ILMN_1770451
+
+```{r}
+time_df=exp_df %>% dplyr::select(NID,Timepoint,ILMN_1770451)  %>% 
+  mutate(Time=case_when(
+    Timepoint=="b1" ~0,
+    Timepoint=="pe1" ~ 1,
+    Timepoint=="p24_1" ~ 2
+))
+
+library(ggplot2)
+
+plot_KLF16_CBT=ggplot(time_df,aes(x=Time,y=ILMN_1770451,group=NID,colour=NID))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "KLF16 during Therapy",y="expression residuals")+
+  theme(legend.position = "none",plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank())+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=1))
+plot_KLF16_CBT
+```
+
+
+### color coded for the remission status: 
+
+```{r}
+pheno=read.csv(params$pheno,sep=";")
+pheno_df=pheno %>%
+  mutate(response=case_when(HAMAend/HAMA <=0.5 ~ 1,HAMAend/HAMA > 0.5 ~ 0)) %>% 
+  mutate(remission=case_when(HAMAend <=7 ~1,HAMAend >7 ~0)) %>% 
+  dplyr::select(c(NID,response,remission))
+
+remission_df=left_join(time_df,pheno_df) %>% filter (!is.na(remission))
+
+plot_KLF16_postint_remission=ggplot(remission_df,aes(x=Time,y=ILMN_1770451,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "KLF16",y="expression residuals",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_KLF16_postint_remission
+```
+
+#### Statistical tests for difference between remission1 and 0:
+
+LMM with interaction: 
+
+```{r}
+exp_probe="ILMN_1770451"
+
+probe_df=exp_df %>% dplyr::select(c("NID","Timepoint",all_of(exp_probe)))
+probe_df=left_join(probe_df,pheno_df)
+probe_df=probe_df %>% mutate(Time=case_when(
+  Timepoint=="b1" ~ 0,
+  Timepoint=="pe1" ~ 1,
+  Timepoint=="p24_1" ~ 2
+))
+probe_df=probe_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+library(FRGEpistasis)
+probe_df=probe_df %>% mutate(!!sym(exp_probe) := rankTransPheno(!!sym(exp_probe),para_c = 3/8))
+library(lmerTest)
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID)"))
+lmm_2_random_slope=lmer(formula_random_slope,data=probe_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```
+
+T-test for the different Timepoints:
+
+```{r}
+t.test(remission_df %>% dplyr::filter(Time==0 & remission==0) %>% pull (ILMN_1770451),remission_df %>% dplyr::filter(Time==0 & remission==1) %>% pull (ILMN_1770451))
+t.test(remission_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (ILMN_1770451),remission_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (ILMN_1770451))
+t.test(remission_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (ILMN_1770451),remission_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (ILMN_1770451))
+```
+
+### color coded for the remission status and centered at 0 for BE:
+
+```{r}
+centered_time_df=time_df %>% group_by(NID) %>% group_map(~mutate(.,ILMN_1770451=ILMN_1770451  - as.numeric(.$ILMN_1770451[.$Timepoint=="b1"])),.keep=T) %>% bind_rows()
+remission_df=left_join(centered_time_df,pheno_df)%>% filter (!is.na(remission))
+```
+
+```{r}
+plot_KLF16_postint_remission=ggplot(remission_df,aes(x=Time,y=ILMN_1770451,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "KLF16",y="delta exp. resid.",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_KLF16_postint_remission
+```
+
+#### Statistical tests for difference between remission1 and 0:
+
+LMM with interaction: 
+
+```{r}
+exp_probe="ILMN_1770451"
+
+probe_df=remission_df %>% dplyr::select(c("NID","Timepoint",all_of(exp_probe)))
+probe_df=left_join(probe_df,pheno_df)
+probe_df=probe_df %>% mutate(Time=case_when(
+  Timepoint=="b1" ~ 0,
+  Timepoint=="pe1" ~ 1,
+  Timepoint=="p24_1" ~ 2
+))
+probe_df=probe_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+library(FRGEpistasis)
+probe_df=probe_df %>% mutate(!!sym(exp_probe) := rankTransPheno(!!sym(exp_probe),para_c = 3/8))
+library(lmerTest)
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID)"))
+lmm_2_random_slope=lmer(formula_random_slope,data=probe_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```
+
+T-test for the different Timepoints:
+
+```{r}
+t.test(remission_df %>% dplyr::filter(Time==0 & remission==0) %>% pull (ILMN_1770451),remission_df %>% dplyr::filter(Time==0 & remission==1) %>% pull (ILMN_1770451))
+t.test(remission_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (ILMN_1770451),remission_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (ILMN_1770451))
+t.test(remission_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (ILMN_1770451),remission_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (ILMN_1770451))
+```

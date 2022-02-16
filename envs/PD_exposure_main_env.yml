@@ -1,0 +1,8 @@
+name: PD_exposure_main
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - bioconda::snakemake >= 6.12.3
+  - mamba 

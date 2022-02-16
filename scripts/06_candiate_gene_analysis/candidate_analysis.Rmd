@@ -1,0 +1,168 @@
+---
+title: "candiate_gene_analysis"
+author: "Sylvain Moser"
+date: "2/11/2021"
+output: 
+  html_document:
+    code_folding: hide
+params:
+  candidate_analysis_exposure_results: !r NULL
+  exposure_final_processed_results: !r NULL
+  candidate_analysis_therapy_results: !r NULL
+  therapy_final_processed_results: !r NULL
+  candidate_analysis_expression_therapy_results: !r NULL
+  candidate_analysis_expression_exposure_results: !r NULL
+  candidate_analysis_iurato_therapy_results: !r NULL
+  candidate_analysis_iurato_exposure_results: !r NULL
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The candidate gene analysis was performed using a separate script and results are depicted here
+
+```{r}
+library(dplyr)
+```
+
+## Exposure
+
+```{r}
+candidates=read.table(params$candidate_analysis_exposure_results,h=T,stringsAsFactors = F)
+
+load(params$exposure_final_processed_results)
+```
+
+```{r}
+print (head(candidates %>% arrange(qval)))
+```
+
+
+
+### checking if distribution of pvalues in the candidates genes is different as for all other CpGs: 
+
+Using a logistic regression with the binary candidates variable and p-value as a predictor: 
+
+```{r}
+log_df=final_processed_results %>% select(island,best_lmm_pval) %>% mutate(candidate=ifelse(island %in% candidates$island,1,0))
+log_mod=glm(candidate ~ best_lmm_pval,data=log_df,family = "binomial")
+summary(log_mod)
+```
+
+## Therapy
+
+```{r}
+candidates=read.table(params$candidate_analysis_therapy_results,h=T,stringsAsFactors = F)
+
+load(params$therapy_final_processed_results)
+```
+
+```{r}
+print (head(candidates %>% arrange(qval)))
+```
+
+### checking if distribution of pvalues in the candidates genes is different as for all other CpGs: 
+
+Using a logistic regression with the binary candidates variable and p-value as a predictor: 
+
+```{r}
+log_df=final_processed_results %>% select(island,best_lmm_pval) %>% mutate(candidate=ifelse(island %in% candidates$island,1,0))
+log_mod=glm(candidate ~ best_lmm_pval,data=log_df,family = "binomial")
+summary(log_mod)
+```
+
+### Candidate gene analysis based on the significant genes expression changes during CBT in Martins et al : 
+
+#### Exposure
+
+```{r}
+candidates=read.table(params$candidate_analysis_expression_exposure_results,h=T,stringsAsFactors = F)
+load(params$exposure_final_processed_results)
+```
+
+```{r}
+print (head(candidates %>% arrange(qval)))
+```
+
+
+
+### checking if distribution of pvalues in the candidates genes is different as for all other CpGs: 
+
+Using a logistic regression with the binary candidates variable and p-value as a predictor: 
+
+```{r}
+log_df=final_processed_results %>% select(island,best_lmm_pval) %>% mutate(candidate=ifelse(island %in% candidates$island,1,0))
+log_mod=glm(candidate ~ best_lmm_pval,data=log_df,family = "binomial")
+summary(log_mod)
+```
+
+#### Therapy
+
+```{r}
+candidates=read.table(params$candidate_analysis_expression_therapy_results,h=T,stringsAsFactors = F)
+load(params$therapy_final_processed_results)
+```
+
+```{r}
+print (head(candidates %>% arrange(qval)))
+```
+
+### checking if distribution of pvalues in the candidates genes is different as for all other CpGs: 
+
+Using a logistic regression with the binary candidates variable and p-value as a predictor: 
+
+```{r}
+log_df=final_processed_results %>% select(island,best_lmm_pval) %>% mutate(candidate=ifelse(island %in% candidates$island,1,0))
+log_mod=glm(candidate ~ best_lmm_pval,data=log_df,family = "binomial")
+summary(log_mod)
+```
+
+### Candidate gene analysis based on the significant CpGs in the case control EWAS of Iurato (and two Cpgs from the Naik paper : 
+
+#### Exposure
+
+```{r}
+candidates=read.table(params$candidate_analysis_iurato_exposure_results,h=T,stringsAsFactors = F)
+load(params$exposure_final_processed_results)
+```
+
+```{r}
+print (head(candidates %>% arrange(qval)))
+```
+
+
+
+### checking if distribution of pvalues in the candidates genes is different as for all other CpGs: 
+
+Using a logistic regression with the binary candidates variable and p-value as a predictor: 
+
+```{r}
+log_df=final_processed_results %>% select(island,best_lmm_pval) %>% mutate(candidate=ifelse(island %in% candidates$island,1,0))
+log_mod=glm(candidate ~ best_lmm_pval,data=log_df,family = "binomial")
+summary(log_mod)
+```
+
+
+
+#### Therapy
+
+```{r}
+candidates=read.table(params$candidate_analysis_iurato_therapy_results,h=T,stringsAsFactors = F)
+load(params$therapy_final_processed_results)
+```
+
+```{r}
+print (head(candidates %>% arrange(qval)))
+```
+
+### checking if distribution of pvalues in the candidates genes is different as for all other CpGs: 
+
+Using a logistic regression with the binary candidates variable and p-value as a predictor: 
+
+```{r}
+log_df=final_processed_results %>% select(island,best_lmm_pval) %>% mutate(candidate=ifelse(island %in% candidates$island,1,0))
+log_mod=glm(candidate ~ best_lmm_pval,data=log_df,family = "binomial")
+summary(log_mod)
+```

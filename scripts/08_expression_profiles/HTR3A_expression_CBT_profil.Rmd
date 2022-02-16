@@ -1,0 +1,507 @@
+---
+title: "HTR3A_expression_CBT_profile"
+author: "Sylvain Moser"
+date: "2/2/2021"
+output: 
+  html_document:
+    code_folding: hide
+params:
+  expression_df: !r NULL
+  pheno: !r NULL
+  illu_annot: !r NULL
+---
+
+```{r}
+prefix_statgen=ifelse(file.exists("/psycl/g/mpsstatgen/symo/dummy_file.txt"),"/psycl/g/mpsstatgen/symo/anxiety_methylation/","/Users/sylvain_moser/anxiety_methylation/")
+```
+
+```{r}
+library(dplyr)
+```
+
+# Find the probes annotated to the HTR3A gene:
+
+```{r,warning=FALSE,message=F}
+genes_to_probe=function(genesSymbol){
+  library(illuminaHumanv4.db)
+  genes_to_probe_df=as.data.frame(select(illuminaHumanv4.db, 
+         keys = genesSymbol, 
+         columns=c("SYMBOL","PROBEID"), 
+         keytype="SYMBOL"))
+  return(as.vector(genes_to_probe_df %>% pull (PROBEID)))
+}
+```
+
+```{r,message=FALSE,warning=FALSE}
+print(genes_to_probe("HTR3A"))
+```
+
+# Gene expression profile using the residuals after regressing out the immune cell-types:
+
+```{r}
+exp_df=readRDS(params$expression_df)
+exposure_ID=exp_df %>% filter(Timepoint %in% c("b1","pe1","p24_1")) %>% pull(NID)
+```
+
+
+## ILMN_1662070
+
+```{r}
+time_df=exp_df %>% dplyr::select(NID,Timepoint,ILMN_1662070)  %>% 
+  mutate(Time=case_when(
+    Timepoint=="b1" ~0,
+    Timepoint=="pe1" ~ 1,
+    Timepoint=="p24_1" ~ 2
+))
+
+library(ggplot2)
+
+plot_HTR3A_CBT=ggplot(time_df,aes(x=Time,y=ILMN_1662070,group=NID,colour=NID))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A during Therapy",y="gene expression")+
+  theme(legend.position = "none",plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank())
+plot_HTR3A_CBT
+```
+
+
+### color coded for the remission status: 
+
+```{r}
+pheno=read.csv(params$pheno,sep=";")
+pheno_df=pheno %>%
+  mutate(response=case_when(HAMAend/HAMA <=0.5 ~ 1,HAMAend/HAMA > 0.5 ~ 0)) %>% 
+  mutate(remission=case_when(HAMAend <=7 ~1,HAMAend >7 ~0)) %>% 
+  dplyr::select(c(NID,response,remission))
+
+remission_df=left_join(time_df,pheno_df) %>% filter (!is.na(remission))
+
+plot_HTR3A_postint_remission=ggplot(remission_df,aes(x=Time,y=ILMN_1662070,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A",y="expression residuals",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_HTR3A_postint_remission
+```
+
+#### Statistical tests for difference between remission1 and 0:
+
+LMM with interaction: 
+
+```{r}
+exp_probe="ILMN_1662070"
+
+probe_df=exp_df %>% dplyr::select(c("NID","Timepoint",all_of(exp_probe)))
+probe_df=left_join(probe_df,pheno_df)
+probe_df=probe_df %>% mutate(Time=case_when(
+  Timepoint=="b1" ~ 0,
+  Timepoint=="pe1" ~ 1,
+  Timepoint=="p24_1" ~ 2
+))
+probe_df=probe_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+library(FRGEpistasis)
+probe_df=probe_df %>% mutate(!!sym(exp_probe) := rankTransPheno(!!sym(exp_probe),para_c = 3/8))
+library(lmerTest)
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID)"))
+lmm_2_random_slope=lmer(formula_random_slope,data=probe_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```
+
+T-test for the different Timepoints:
+
+```{r}
+t.test(remission_df %>% dplyr::filter(Time==0 & remission==0) %>% pull (ILMN_1662070),remission_df %>% dplyr::filter(Time==0 & remission==1) %>% pull (ILMN_1662070))
+t.test(remission_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (ILMN_1662070),remission_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (ILMN_1662070))
+t.test(remission_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (ILMN_1662070),remission_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (ILMN_1662070))
+```
+
+### color coded for the remission status and centered at 0 for BE:
+
+```{r}
+centered_time_df=time_df %>% group_by(NID) %>% group_map(~mutate(.,ILMN_1662070=ILMN_1662070  - as.numeric(.$ILMN_1662070[.$Timepoint=="b1"])),.keep=T) %>% bind_rows()
+remission_df=left_join(centered_time_df,pheno_df)%>% filter (!is.na(remission))
+```
+
+```{r}
+plot_HTR3A_postint_remission=ggplot(remission_df,aes(x=Time,y=ILMN_1662070,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A",y="delta exp. resid.",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_HTR3A_postint_remission
+```
+
+#### Statistical tests for difference between remission1 and 0:
+
+LMM with interaction: 
+
+```{r}
+exp_probe="ILMN_1662070"
+
+probe_df=remission_df %>% dplyr::select(c("NID","Timepoint",all_of(exp_probe)))
+probe_df=left_join(probe_df,pheno_df)
+probe_df=probe_df %>% mutate(Time=case_when(
+  Timepoint=="b1" ~ 0,
+  Timepoint=="pe1" ~ 1,
+  Timepoint=="p24_1" ~ 2
+))
+probe_df=probe_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+probe_df=probe_df %>% mutate(!!sym(exp_probe) := rankTransPheno(!!sym(exp_probe),para_c = 3/8))
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID)"))
+lmm_2_random_slope=lmer(formula_random_slope,data=probe_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```
+
+T-test for the different Timepoints:
+
+```{r}
+t.test(remission_df %>% dplyr::filter(Time==0 & remission==0) %>% pull (ILMN_1662070),remission_df %>% dplyr::filter(Time==0 & remission==1) %>% pull (ILMN_1662070))
+t.test(remission_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (ILMN_1662070),remission_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (ILMN_1662070))
+t.test(remission_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (ILMN_1662070),remission_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (ILMN_1662070))
+```
+
+## ILMN_1681492
+
+```{r}
+time_df=exp_df %>% dplyr::select(NID,Timepoint,ILMN_1681492)  %>% 
+  mutate(Time=case_when(
+    Timepoint=="b1" ~0,
+    Timepoint=="pe1" ~ 1,
+    Timepoint=="p24_1" ~ 2
+))
+
+library(ggplot2)
+
+plot_HTR3A_CBT=ggplot(time_df,aes(x=Time,y=ILMN_1681492,group=NID,colour=NID))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A during Therapy",y="gene expression")+
+  theme(legend.position = "none",plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank())
+plot_HTR3A_CBT
+```
+
+
+### color coded for the remission status: 
+
+```{r}
+remission_df=left_join(time_df,pheno_df) %>% filter (!is.na(remission))
+
+plot_HTR3A_postint_remission=ggplot(remission_df,aes(x=Time,y=ILMN_1681492,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A",y="expression residuals",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_HTR3A_postint_remission
+```
+
+#### Statistical tests for difference between remission1 and 0:
+
+LMM with interaction: 
+
+```{r}
+exp_probe="ILMN_1681492"
+
+probe_df=exp_df %>% dplyr::select(c("NID","Timepoint",all_of(exp_probe)))
+probe_df=left_join(probe_df,pheno_df)
+probe_df=probe_df %>% mutate(Time=case_when(
+  Timepoint=="b1" ~ 0,
+  Timepoint=="pe1" ~ 1,
+  Timepoint=="p24_1" ~ 2
+))
+probe_df=probe_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+probe_df=probe_df %>% mutate(!!sym(exp_probe) := rankTransPheno(!!sym(exp_probe),para_c = 3/8))
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID)"))
+lmm_2_random_slope=lmer(formula_random_slope,data=probe_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```
+
+T-test for the different Timepoints:
+
+```{r}
+t.test(remission_df %>% dplyr::filter(Time==0 & remission==0) %>% pull (ILMN_1681492),remission_df %>% dplyr::filter(Time==0 & remission==1) %>% pull (ILMN_1681492))
+t.test(remission_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (ILMN_1681492),remission_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (ILMN_1681492))
+t.test(remission_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (ILMN_1681492),remission_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (ILMN_1681492))
+```
+
+### color coded for the remission status and centered at 0 for BE:
+
+```{r}
+centered_time_df=time_df %>% group_by(NID) %>% group_map(~mutate(.,ILMN_1681492=ILMN_1681492  - as.numeric(.$ILMN_1681492[.$Timepoint=="b1"])),.keep=T) %>% bind_rows()
+remission_df=left_join(centered_time_df,pheno_df)%>% filter (!is.na(remission))
+```
+
+```{r}
+plot_HTR3A_postint_remission=ggplot(remission_df,aes(x=Time,y=ILMN_1681492,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A",y="delta exp. resid.",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_HTR3A_postint_remission
+```
+
+#### Statistical tests for difference between remission1 and 0:
+
+LMM with interaction: 
+
+```{r}
+exp_probe="ILMN_1681492"
+
+probe_df=remission_df %>% dplyr::select(c("NID","Timepoint",all_of(exp_probe)))
+probe_df=left_join(probe_df,pheno_df)
+probe_df=probe_df %>% mutate(Time=case_when(
+  Timepoint=="b1" ~ 0,
+  Timepoint=="pe1" ~ 1,
+  Timepoint=="p24_1" ~ 2
+))
+probe_df=probe_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+probe_df=probe_df %>% mutate(!!sym(exp_probe) := rankTransPheno(!!sym(exp_probe),para_c = 3/8))
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID)"))
+lmm_2_random_slope=lmer(formula_random_slope,data=probe_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```
+
+T-test for the different Timepoints:
+
+```{r}
+t.test(remission_df %>% dplyr::filter(Time==0 & remission==0) %>% pull (ILMN_1681492),remission_df %>% dplyr::filter(Time==0 & remission==1) %>% pull (ILMN_1681492))
+t.test(remission_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (ILMN_1681492),remission_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (ILMN_1681492))
+t.test(remission_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (ILMN_1681492),remission_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (ILMN_1681492))
+```
+
+## ILMN_2371079
+
+```{r}
+time_df=exp_df %>% dplyr::select(NID,Timepoint,ILMN_2371079)  %>% 
+  mutate(Time=case_when(
+    Timepoint=="b1" ~0,
+    Timepoint=="pe1" ~ 1,
+    Timepoint=="p24_1" ~ 2
+))
+
+library(ggplot2)
+
+plot_HTR3A_CBT=ggplot(time_df,aes(x=Time,y=ILMN_2371079,group=NID,colour=NID))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A during Therapy",y="gene expression")+
+  theme(legend.position = "none",plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank())
+```
+
+
+### color coded for the remission status: 
+
+```{r}
+remission_df=left_join(time_df,pheno_df) %>% filter (!is.na(remission))
+
+plot_HTR3A_postint_remission=ggplot(remission_df,aes(x=Time,y=ILMN_2371079,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A",y="expression residuals",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_HTR3A_postint_remission
+```
+
+#### Statistical tests for difference between remission1 and 0:
+
+LMM with interaction: 
+
+```{r}
+exp_probe="ILMN_2371079"
+
+probe_df=exp_df %>% dplyr::select(c("NID","Timepoint",all_of(exp_probe)))
+probe_df=left_join(probe_df,pheno_df)
+probe_df=probe_df %>% mutate(Time=case_when(
+  Timepoint=="b1" ~ 0,
+  Timepoint=="pe1" ~ 1,
+  Timepoint=="p24_1" ~ 2
+))
+probe_df=probe_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+probe_df=probe_df %>% mutate(!!sym(exp_probe) := rankTransPheno(!!sym(exp_probe),para_c = 3/8))
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID)"))
+lmm_2_random_slope=lmer(formula_random_slope,data=probe_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```
+
+T-test for the different Timepoints:
+
+```{r}
+t.test(remission_df %>% dplyr::filter(Time==0 & remission==0) %>% pull (ILMN_2371079),remission_df %>% dplyr::filter(Time==0 & remission==1) %>% pull (ILMN_2371079))
+t.test(remission_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (ILMN_2371079),remission_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (ILMN_2371079))
+t.test(remission_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (ILMN_2371079),remission_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (ILMN_2371079))
+```
+
+### color coded for the remission status and centered at 0 for BE:
+
+```{r}
+centered_time_df=time_df %>% group_by(NID) %>% group_map(~mutate(.,average_exp=ILMN_2371079  - as.numeric(.$ILMN_2371079[.$Timepoint=="b1"])),.keep=T) %>% bind_rows()
+remission_df=left_join(centered_time_df,pheno_df)%>% filter (!is.na(remission))
+```
+
+```{r}
+plot_HTR3A_postint_remission=ggplot(remission_df,aes(x=Time,y=ILMN_2371079,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A",y="delta exp. resid.",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_HTR3A_postint_remission
+```
+
+#### Statistical tests for difference between remission1 and 0:
+
+LMM with interaction: 
+
+```{r}
+exp_probe="ILMN_2371079"
+
+probe_df=remission_df %>% dplyr::select(c("NID","Timepoint",all_of(exp_probe)))
+probe_df=left_join(probe_df,pheno_df)
+probe_df=probe_df %>% mutate(Time=case_when(
+  Timepoint=="b1" ~ 0,
+  Timepoint=="pe1" ~ 1,
+  Timepoint=="p24_1" ~ 2
+))
+probe_df=probe_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+probe_df=probe_df %>% mutate(!!sym(exp_probe) := rankTransPheno(!!sym(exp_probe),para_c = 3/8))
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID)"))
+lmm_2_random_slope=lmer(formula_random_slope,data=probe_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```
+
+T-test for the different Timepoints:
+
+```{r}
+t.test(remission_df %>% dplyr::filter(Time==0 & remission==0) %>% pull (ILMN_2371079),remission_df %>% dplyr::filter(Time==0 & remission==1) %>% pull (ILMN_2371079))
+t.test(remission_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (ILMN_2371079),remission_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (ILMN_2371079))
+t.test(remission_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (ILMN_2371079),remission_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (ILMN_2371079))
+```
+
+
+### where are these different probes located: 
+
+```{r}
+illu_annot=data.table::fread(params$illu_annot,sep="\t",skip = 8,h=T,fill=TRUE)
+illu_annot %>% filter (Probe_Id %in% c("ILMN_2371079","ILMN_1662070","ILMN_1681492"))
+```
+ILMN_2371079 and ILMN_1662070 are targetting one transcript and should therefore be averaged: 
+
+ILMN_2371079 actual coordinates are: 11:113,990,161-11:113,990,210
+
+ILMN_1662070 actual coordinates are: 11:113,989,966 to 11:113,990,015
+
+#### averaging over ILMN_2371079 and ILMN_1662070: 
+
+```{r}
+averaged_df=exp_df %>% dplyr::select(NID,Timepoint,ILMN_1662070,ILMN_2371079)  %>% 
+  mutate(Time=case_when(
+    Timepoint=="b1" ~0,
+    Timepoint=="pe1" ~ 1,
+    Timepoint=="p24_1" ~ 2
+  )) %>% 
+  mutate(average_exp=(ILMN_1662070+ILMN_2371079)/2)
+
+averaged_remission_df=left_join(averaged_df,pheno_df) %>% filter (!is.na(remission))
+```
+
+
+
+```{r}
+plot_HTR3A_postint_remission=ggplot(averaged_remission_df,aes(x=Time,y=average_exp,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A",y="expression residuals",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_HTR3A_postint_remission
+```
+
+
+
+#### Statistical tests for difference between remission1 and 0:
+
+LMM with interaction: 
+
+```{r}
+averaged_remission_df=averaged_remission_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+averaged_remission_df=averaged_remission_df %>% mutate(average_exp= rankTransPheno(average_exp,para_c = 3/8))
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID)"))
+lmm_2_random_slope=lmer(average_exp ~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID),data=averaged_remission_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```
+
+
+
+T-test for the different Timepoints:
+
+```{r}
+t.test(averaged_remission_df %>% dplyr::filter(Time==0 & remission==0) %>% pull (average_exp),averaged_remission_df %>% dplyr::filter(Time==0 & remission==1) %>% pull (average_exp))
+t.test(averaged_remission_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (average_exp),averaged_remission_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (average_exp))
+t.test(averaged_remission_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (average_exp),averaged_remission_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (average_exp))
+```
+
+```{r}
+avereg_centered_time_df=averaged_remission_df %>% group_by(NID) %>% group_map(~mutate(.,average_exp=average_exp  - as.numeric(.$average_exp[.$Timepoint=="b1"])),.keep=T) %>% bind_rows()
+avereg_centered_time_df=left_join(avereg_centered_time_df,pheno_df)%>% filter (!is.na(remission))
+```
+
+```{r}
+plot_HTR3A_postint_remission_centered=ggplot(avereg_centered_time_df,aes(x=Time,y=average_exp,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A",y="delta exp. resid.",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_HTR3A_postint_remission_centered
+```
+
+
+
+```{r}
+avereg_centered_time_df=avereg_centered_time_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+avereg_centered_time_df=avereg_centered_time_df %>% mutate(average_exp= rankTransPheno(average_exp,para_c = 3/8))
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)"))
+lmm_2_random_slope=lmer(average_exp ~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID),data=averaged_remission_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```
+
+T-test for the different Timepoints:
+
+```{r}
+t.test(avereg_centered_time_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (average_exp),avereg_centered_time_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (average_exp))
+t.test(avereg_centered_time_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (average_exp),avereg_centered_time_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (average_exp))
+```
+
+
+
+#### averaging over all 3 probes: 
+
+```{r}
+averaged_df=exp_df %>% dplyr::select(NID,Timepoint,ILMN_1662070,ILMN_2371079,ILMN_1681492)  %>% 
+  mutate(Time=case_when(
+    Timepoint=="b1" ~0,
+    Timepoint=="pe1" ~ 1,
+    Timepoint=="p24_1" ~ 2
+  )) %>% 
+  mutate(average_exp=(ILMN_1662070+ILMN_2371079+ILMN_1681492)/3)
+
+averaged_remission_df=left_join(averaged_df,pheno_df) %>% filter (!is.na(remission))
+```
+
+
+
+```{r}
+plot_HTR3A_postint_remission=ggplot(averaged_remission_df,aes(x=Time,y=average_exp,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2),labels=c("BE","PE1h","PE24h"))+
+  labs(title = "HTR3A",y="expression residuals",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_HTR3A_postint_remission
+```
+
+
+
+#### Statistical tests for difference between remission1 and 0:
+
+LMM with interaction: 
+
+```{r}
+averaged_remission_df=averaged_remission_df %>% filter (!is.na(NID)) %>% filter (!is.na(remission))
+averaged_remission_df=averaged_remission_df %>% mutate(average_exp= rankTransPheno(average_exp,para_c = 3/8))
+formula_random_slope=as.formula(paste0(exp_probe,"~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID)"))
+lmm_2_random_slope=lmer(average_exp ~ I(Time^2)*remission + (I(Time^2)|NID)+(1|NID),data=averaged_remission_df,REML = TRUE)
+anova(lmm_2_random_slope)
+```

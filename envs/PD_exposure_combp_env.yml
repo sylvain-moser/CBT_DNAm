@@ -1,0 +1,11 @@
+name: PD_exposure_combp
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python
+  - numpy
+  - scipy
+  - toolshed 
+  - combined-pvalues
+  - bedtools

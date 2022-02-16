@@ -1,0 +1,32 @@
+name: PD_exposure_r
+channels:
+  - conda-forge
+dependencies:
+  - r-base
+  - r-dplyr
+  - r-haven
+  - r-tidyr
+  - bioconductor-genomicranges
+  - bioconductor-repitools
+  - r-rmarkdown
+  - bioconductor-chipseeker
+  - r-ggplot2
+  - bioconductor-methyanalysis
+  - r-purrr
+  - r-gridextra
+  - bioconductor-missmethyl
+  - bioconductor-methylgsa
+  - bioconductor-sva
+  - r-wgcna
+  - r-lme4
+  - r-data.table
+  - r-pbmcapply
+  - r-lmertest
+  - r-webgestaltr
+  - bioconductor-frgepistasis
+  - r-assertthat
+  - r-feather
+  - bioconductor-illuminahumanv4.db
+  - r-matrix
+  - r-askpass
+  - r-rvcheck=0.1.8

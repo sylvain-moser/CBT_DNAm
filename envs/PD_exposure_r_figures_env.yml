@@ -1,0 +1,12 @@
+name: PD_exposure_r_figures
+channels:
+  - conda-forge
+dependencies:
+  - r-base
+  - r-dplyr
+  - r-tidyr
+  - r-ggplot2
+  - r-ggplotify
+  - r-ggpubr
+  - r-gridExtra
+  - r-lmerTest

@@ -1,0 +1,231 @@
+---
+title: "TMEM132D_methylation_CBT_profile"
+author: "Sylvain Moser"
+date: "2/2/2021"
+output: 
+  html_document:
+    code_folding: hide
+params:
+  methylation_df: !r NULL
+  pheno: !r NULL
+  methylation_residuals: !r NULL
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,warning=FALSE,message=FALSE}
+library(dplyr)
+library(ggplot2)
+```
+
+
+```{r}
+load(params$methylation_df)
+
+exposure_ID=meth_df %>% filter(Timepoint %in% c("b1","pe1","p24_1")) %>% pull(NID)
+therapy_ID=meth_df %>% filter(Timepoint %in% c("T0","T4","E","K1")) %>% pull(NID)
+```
+
+# Profiles using raw methylation data 
+
+## whole CBT profile: 
+
+```{r}
+time_df=meth_df %>% select(NID,Timepoint,cg07056260) %>% filter (NID %in% intersect(exposure_ID,therapy_ID)) %>% 
+  mutate(Time=case_when(
+    Timepoint=="T0" ~ 0,
+    Timepoint=="T4" ~ 1,
+    Timepoint=="b1" ~ 2,
+    Timepoint=="pe1" ~ 3,
+    Timepoint=="p24_1" ~ 4,
+    Timepoint=="E" ~ 5,
+    Timepoint=="K1" ~ 6,
+))
+
+
+plot_TMEM132D_CBT=ggplot(time_df,aes(x=Time,y=cg07056260,group=NID,colour=NID))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4,5,6),labels=c("T0","T4","BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D during Therapy",y="beta values")+
+  theme(legend.position = "none",plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank())
+plot_TMEM132D_CBT
+```
+
+## Only exposure and following timepoints: 
+```{r}
+time_df=meth_df %>% select(NID,Timepoint,cg07056260) %>% filter (NID %in% intersect(exposure_ID,therapy_ID)) %>% 
+  mutate(Time=case_when(
+    Timepoint=="b1" ~ 0,
+    Timepoint=="pe1" ~ 1,
+    Timepoint=="p24_1" ~ 2,
+    Timepoint=="E" ~ 3,
+    Timepoint=="K1" ~ 4,
+  ))
+
+plot_TMEM132D_postint=ggplot(time_df,aes(x=Time,y=cg07056260,group=NID,colour=NID))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4),labels=c("BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D after Exposure",y="beta values")+
+  theme(legend.position = "none",plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank())
+plot_TMEM132D_postint
+```
+
+### color coded for the remission status: 
+```{r}
+pheno=read.csv(params$pheno,sep=";")
+pheno_df=pheno %>%
+  mutate(response=case_when(HAMAend/HAMA <=0.5 ~ 1,HAMAend/HAMA > 0.5 ~ 0)) %>% 
+  mutate(remission=case_when(HAMAend <=7 ~1,HAMAend >7 ~0)) %>% 
+  select(c(NID,response,remission))
+
+remission_df=left_join(time_df,pheno_df)
+
+plot_TMEM132D_postint_remission=ggplot(remission_df,aes(x=Time,y=cg07056260,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4),labels=c("BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D",y="beta values",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_TMEM132D_postint_remission
+```
+
+### color coded for the response status: 
+
+```{r}
+plot_TMEM132D_postint_response=ggplot(remission_df,aes(x=Time,y=cg07056260,group=NID,colour=as.factor(response)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4),labels=c("BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D",y="beta values",colour="response")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(response)))
+plot_TMEM132D_postint_response
+
+rm(meth_df,remission_df,time_df)
+```
+
+# Profiles using residuals of the methylation data after regressing the immune cell types
+
+```{r}
+meth_residuals=readRDS(params$methylation_residuals)
+```
+
+## whole CBT profile: 
+
+```{r}
+time_df=meth_residuals %>% select(NID,Timepoint,cg07056260) %>% filter (NID %in% intersect(exposure_ID,therapy_ID)) %>% 
+  mutate(Time=case_when(
+    Timepoint=="T0" ~ 0,
+    Timepoint=="T4" ~ 1,
+    Timepoint=="b1" ~ 2,
+    Timepoint=="pe1" ~ 3,
+    Timepoint=="p24_1" ~ 4,
+    Timepoint=="E" ~ 5,
+    Timepoint=="K1" ~ 6,
+  ))
+
+
+plot_TMEM132D_CBT_residuals=ggplot(time_df,aes(x=Time,y=cg07056260,group=NID,colour=NID))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4,5,6),labels=c("T0","T4","BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D during therapy",y="residuals beta values")+
+  theme(legend.position = "none",plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank())
+plot_TMEM132D_CBT_residuals
+```
+
+### color coded for the remission status: 
+```{r}
+remission_df=left_join(time_df,pheno_df)
+
+plot_TMEM132D_CBT_residuals_remission=ggplot(remission_df,aes(x=Time,y=cg07056260,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4,5,6),labels=c("T0","T4","BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D",y="residuals beta values",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_TMEM132D_CBT_residuals_remission
+```
+
+### color coded for the response status: 
+
+```{r}
+plot_TMEM132D_CBT_residuals_response=ggplot(remission_df,aes(x=Time,y=cg07056260,group=NID,colour=as.factor(response)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4,5,6),labels=c("T0","T4","BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D",y="residuals beta values",colour="response")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(response)))
+  plot_TMEM132D_CBT_residuals_response
+```
+
+## only the exposure and following time points: 
+
+```{r}
+time_df=meth_residuals %>% select(NID,Timepoint,cg07056260) %>% filter (NID %in% intersect(exposure_ID,therapy_ID)) %>% 
+  mutate(Time=case_when(
+    Timepoint=="b1" ~ 0,
+    Timepoint=="pe1" ~ 1,
+    Timepoint=="p24_1" ~ 2,
+    Timepoint=="E" ~ 3,
+    Timepoint=="K1" ~ 4,
+  ))
+
+plot_TMEM132D_residuals_postint=ggplot(time_df,aes(x=Time,y=cg07056260,group=NID,colour=NID))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4),labels=c("BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D after Exposure",y="residuals beta values")+
+  theme(legend.position = "none",plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank())
+plot_TMEM132D_residuals_postint
+```
+
+### color coded for the remission status: 
+
+```{r}
+remission_df=left_join(time_df,pheno_df)
+
+plot_TMEM132D_CBT_residuals_postint_remission=ggplot(remission_df,aes(x=Time,y=cg07056260,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4),labels=c("BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D after Exposure",y="residuals beta values",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_TMEM132D_CBT_residuals_postint_remission
+```
+## color coded for the response status: 
+
+```{r}
+plot_TMEM132D_CBT_residuals_postint_response=ggplot(remission_df,aes(x=Time,y=cg07056260,group=NID,colour=as.factor(response)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4),labels=c("BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D after Exposure",y="residuals beta values",colour="response")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(response)))
+plot_TMEM132D_CBT_residuals_postint_response
+```
+
+# Profiles using residuals of the methylation data after regressing the immune cell types centered at 0 for BE:
+
+```{r}
+centered_time_df=time_df %>% group_by(NID) %>% group_map(~mutate(.,cg07056260=cg07056260  - as.numeric(.$cg07056260[.$Timepoint=="b1"])),.keep=T) %>% bind_rows()
+remission_df=left_join(centered_time_df,pheno_df)
+```
+
+## remission
+
+```{r}
+plot_TMEM132D_CBT_residuals_centered_postint_remission=ggplot(remission_df,aes(x=Time,y=cg07056260,group=NID,colour=as.factor(remission)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4),labels=c("BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D after Exposure",y="delta residuals beta values",colour="remission")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(remission)))
+plot_TMEM132D_CBT_residuals_centered_postint_remission
+```
+## statistical test for the difference between remission0 and remission1 group: 
+
+```{r}
+t.test(remission_df %>% dplyr::filter(Time==1 & remission==0) %>% pull (cg07056260),remission_df %>% dplyr::filter(Time==1 & remission==1) %>% pull (cg07056260))
+t.test(remission_df %>% dplyr::filter(Time==2 & remission==0) %>% pull (cg07056260),remission_df %>% dplyr::filter(Time==2 & remission==1) %>% pull (cg07056260))
+t.test(remission_df %>% dplyr::filter(Time==3 & remission==0) %>% pull (cg07056260),remission_df %>% dplyr::filter(Time==3 & remission==1) %>% pull (cg07056260))
+```
+
+## response
+
+```{r}
+plot_TMEM132D_CBT_residuals_centered_postint_response=ggplot(remission_df,aes(x=Time,y=cg07056260,group=NID,colour=as.factor(response)))+geom_line()+
+  scale_x_continuous(name="Timepoints",breaks=c(0,1,2,3,4),labels=c("BE","PE1h","PE24h","E","K"))+
+  labs(title = "TMEM132D after Exposure",y="delta residuals beta values",colour="response")+
+  theme(plot.title = element_text(hjust = 0.5),panel.background = element_blank(),text = element_text(size = 30),axis.ticks=element_blank(),legend.title=element_text(size = 20),legend.text = element_text(size = 20),axis.line = element_line(colour ="darkgrey"))+
+  stat_summary(fun=mean,geom="line",lwd=2,aes(group=as.factor(response)))
+plot_TMEM132D_CBT_residuals_centered_postint_response
+```

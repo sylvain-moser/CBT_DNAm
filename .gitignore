@@ -1,0 +1,15 @@
+snakemake_logs/*
+*/._*
+*DS_Store*
+*._.*
+*._*
+*.err
+*.out 
+*cache*
+.pdf
+snakemake_logs_example/*
+results/*
+results_example/*
+data/*
+Project_*
+

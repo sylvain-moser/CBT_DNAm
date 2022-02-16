@@ -1,0 +1,227 @@
+---
+title: "Anxiethy Longitudinal Methylation analysis"
+author: "Sylvain Moser"
+date: "7/20/2020"
+output: 
+  html_document:
+    code_folding: hide
+params:
+  exposure_final_processed_results: !r NULL
+  exposure_cpg_ranked_anotated: !r NULL
+  WebGestal_script: !rNULL
+  back_to_normal_script: !r NULL
+  methylation_df: !r NULL
+  methylation_residuals_df: !r NULL
+  exposure_cpg_ranked: !r NULL
+  candidates: !r NULL
+---
+
+```{r setup, include=FALSE,cache=TRUE,warning=FALSE,message=FALSE,fig.fullwidth = TRUE}
+knitr::opts_chunk$set(echo = TRUE,cache = TRUE,warning=FALSE,message=FALSE,error = TRUE)
+```
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+library(dplyr)
+library(WebGestaltR)
+```
+
+# AIMS:
+
+This markdown reports the main results of the analysis of methylation changes during the Exposure phase of the Cognitive Behavioural Therapy as reported in Moser et al. 
+
+# Methods and Results: 
+
+This report can be divided into the following methodological steps: 
+
+1) QC of the methylation data
+2) Identifying the differentially regulated CpG island over time
+3) Ranking of CpGs with regard to their potential of being regulated
+4) Gene-sets testing for differentially methylated CpG islands
+
+
+## 1) QC of the methylation data:
+
+The raw methylation was normalised with functional normalisation from the minfi package and batch corrected using the combat function from the sva package.
+
+## 2) Identifying the differentially regulated CpG island over time
+
+
+### 2.1 ) surrogate variables estimation: 
+
+the *sva* package was used to compute surrogate variables for each CpG island on the basis of the whole CpGs methylation matrix. Surrogate variables should capture heterogeneity due to unmodeled factor. Because of the high number of variables (450'000 CpGs) it was not computationally tractable to compute surrogate variables based on all CpGs. The surrogate variables were therefore computed on the 10'000 most variables CpG islands.
+
+### 2.2 ) Statistical testing for the timepoints: 
+
+Each of the CpGs was tested separately by fitting different linear mixed models with the scaled and normal-inverse transformed methylation values as outcome, different polynomial of the time as predictors and a random intercept effect for the individuals.In each model, the identified surrogates variables were added as covariates as well as the different immune blood cells counts and the age and sex.
+
+More precisely, two different model with random intercept and respectively first, and second degree polynomial for the time were fitted. Third degree polynomial was not considered as it is almost impossible to fit with 4 time points. These two model were fitted using MLE (and not RMLE) and compared using the Likelihood ratio test (LRT is not valid when model are estimated with REML). The best of the two model was selected for each CpG island. 
+
+In addition, a third model with the first degree time polynomial but random effect for the individual on the intercept and the slope was fitted. And a forth model with the second degree time polynomial random effect (without first degree) and random effect for the individual on the intercept and the slope was fitted
+
+A q-value was computed for each CpG island using the BH FDR correction based on all p-values for all CpG in all 4 models. 
+
+In order to report only one model, and one p-value for each Cpg island, the following method was applied to choose between the best of the random intercept model and the random slope model:
+
+1. The three model were compared using their AIC and the one with the lowest AIC was selected
+2. if the selected model converged: it was selected
+3. if this model failed to converge: the other one was checked
+  + 3.1       if the second model does not fail to converge the second was chosen
+  + 3.2       if the second model failed to converge the third one was checked:
+  + 3.3       if the third model did not fail to converg it was chosen
+  + 3.4       if the third model failed to converge no model was selected and the CpG was considered not regulated. 
+  
+A CpG was considered significantly regulated over time if the p-value for the fixed effect of the time polynomial of the best model was smaller than the chosen FDR threshold. The p-values were computed using a likelihood ratio test between the fitted model and a null model which did not contain the fixed time effect (but the random effect yes). 
+
+### 2.3)  Significantly regulated CpGs 
+
+```{r}
+load(params$exposure_final_processed_results)
+exposure_final=final_processed_results
+```
+
+
+```{r}
+exposure_signif_cpgs=exposure_final %>% filter (qval <=0.2)
+sprintf("A total number of %s significantly differentially methylated CpG islands were found at a FDR threshold of 0.2",dim(exposure_signif_cpgs)[1])
+```
+
+
+### 3) Ranking of the CpGs 
+
+
+This study seems to be one of the very first one to look at longitudinal methylation changes during therapy for anxiety disorder. There is however one publication, (Ziegler et al, The DNA methylome in panic disorder: a case-control and longitudinal psychotherapy-epigenetic study. *Translational psychiatry* 2019) reporting such a study. In this paper, they ranked the CpG according to their biological strength (the methylation difference between two time-points), statistical strength (p-value) and the sum of both. 
+
+In order, to prioritize CpG we reproduced these ranking methods. 
+
+
+```{r}
+load(params$exposure_cpg_ranked)
+load(params$exposure_cpg_ranked_anotated)
+```
+
+#### 3.1 Sum Ranking : 
+
+
+##### 3.1.2 Best model distribution among the best Sum ranked Cpgs: 
+```{r}
+annotations_df=left_join(ranked_df,annotations_df %>% dplyr::select("island","EntrezID","GeneSymbol"))
+sum_ranked_cpgs=annotations_df %>% arrange(sum_rank)
+```
+
+Among the 100 best ones : 
+
+```{r}
+best_cpgs=sum_ranked_cpgs[1:100,]
+random_intercept_1= best_cpgs %>% filter (best_model=="random_intercept" & coef_time2==0)
+random_intercept_2=best_cpgs %>% filter (best_model=="random_intercept" & coef_time2!=0)
+random_slope=best_cpgs %>% filter (best_model=="random_slope")
+random_slope2nd=best_cpgs %>% filter (best_model=="random_slope2nd")
+graphics::barplot(height=c(dim(random_intercept_1)[1],dim(random_intercept_2)[1],dim(random_slope)[1],dim(random_slope2nd)[1]),names.arg = c("1st order","2nd order","random slope","random slope 2nd"))
+```
+
+Among the 1000 best ones: 
+
+
+```{r}
+best_cpgs=sum_ranked_cpgs[1:1000,]
+random_intercept_1= best_cpgs %>% filter (best_model=="random_intercept" & coef_time2==0)
+random_intercept_2=best_cpgs %>% filter (best_model=="random_intercept" & coef_time2!=0)
+random_slope=best_cpgs %>% filter (best_model=="random_slope")
+random_slope2nd=best_cpgs %>% filter (best_model=="random_slope2nd")
+graphics::barplot(height=c(dim(random_intercept_1)[1],dim(random_intercept_2)[1],dim(random_slope)[1],dim(random_slope2nd)[1]),names.arg = c("1st order","2nd order","random slope","random slope 2nd"))
+```
+
+We observe that most of those CpGs are non-linearly regulated, which is coherent with the acute nature of the exposure process.
+
+##### 3.1.3 Best Sum-ranked CpGs: 
+
+```{r,message=FALSE,warning=FALSE}
+sum_ranked_cpgs[1:20,]
+```
+
+In addition, it is also of interest to test which of these CpGs are significantly different at the end of the therapy compared to the beginning, independently of their mode of regulation. We tested this using a t-test for paired-data, among the set of best ranked 100 and 1000 CpGs: 
+
+Among the 100 best ones: 
+
+```{r,message=FALSE,warning=FALSE}
+source(params$back_to_normal_script)
+t_test_results=did_not_return_exposure(sum_ranked_cpgs[1:100, "island"],residuals=TRUE,methylation_data=params$methylation_df,residuals_data=params$methylation_residuals_df)
+head(t_test_results)
+diff_CpGs=t_test_results %>% filter (qval_t_test < 0.05)
+diff_CpGs_100=left_join(diff_CpGs,annotations_df)
+sprintf("%s CpGs are significantly different between time points BE and PE24h. Among them %s have the random intercept 1st order model as best model",length(diff_CpGs_100$island),length(diff_CpGs_100 %>% filter(best_model=="random_intercept" | best_model=="random_slope") %>% filter (coef_time2==0) %>%  pull (island)))
+```
+
+The following CpGs which are significanlty different at the end of the therapy, i.e which regulation is long lasting, might represent specially interesting candidate regarding their role in the therapy process: 
+
+```{r}
+print (diff_CpGs_100)
+```
+
+Among the 1000 best ones: 
+
+```{r}
+t_test_results=did_not_return_exposure(sum_ranked_cpgs[1:1000, "island"],residuals=TRUE,methylation_data=params$methylation_df,residuals_data=params$methylation_residuals_df)
+diff_CpGs=t_test_results %>% filter (qval_t_test < 0.05)
+diff_CpGs_1000=left_join(diff_CpGs,annotations_df)
+sprintf("%s CpGs are significantly different between time points BE and PE24h. Among them %s have the random intercept 1st order model as best model",length(diff_CpGs_1000$island),length(diff_CpGs_1000 %>% filter(best_model=="random_intercept" | best_model=="random_slope") %>% filter (coef_time2==0) %>%  pull (island)))
+```
+
+```{r}
+print (diff_CpGs_1000)
+```
+
+#### 3.1.4: Gene sets Enrichment for best Sum ranked CpGs:
+
+```{r,message=F,warning=F}
+source(params$WebGestal_script)
+```
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+library(missMethyl)
+library(methylGSA)
+```
+
+```{r,error=TRUE}
+missMethyl_ORA=function(signif_cpgs,all_cpgs,db,FDR_threshold){
+  print(sprintf("ORA with missMethyl on the %s with a FDR threhsold of %s",db,FDR_threshold))
+  ORA=gometh(sig.cpg=signif_cpgs ,all.cpg = all_cpgs,collection = db)
+  signif_ORA=ORA %>% filter(FDR <=FDR_threshold) %>% arrange(FDR)
+  if (dim(signif_ORA)[1]==0){
+    print ("No significant results...")
+  }
+  else if (dim(signif_ORA)[1]<10){
+    print(signif_ORA)
+  } else {
+    print (signif_ORA[1:10,])
+    print(sprintf("There are %s significant Gene sets. Displaying only the %s most significant ones",dim(signif_ORA)[1],50))
+  }
+}
+```
+
+GSEA with the 100 best ranked CpGs in the Sum Rank: 
+
+```{r,warning=FALSE,message=F,error=TRUE}
+missMethyl_ORA(signif_cpgs = sum_ranked_cpgs$island[1:100],all_cpgs = exposure_final$island,db = "GO",FDR_threshold = 0.2)
+missMethyl_ORA(signif_cpgs = sum_ranked_cpgs$island[1:100],all_cpgs = exposure_final$island,db = "KEGG",FDR_threshold = 0.2)
+```
+
+
+```{r,warning=FALSE,message=F,error=TRUE}
+webgestalt_ORA(interest_genes_EntrezID = sum_ranked_cpgs$EntrezID[1:100],FDR_threshold = 0.2)
+webgestalt_GSEA(interest_genes_EntrezID = sum_ranked_cpgs[1:100,c("EntrezID","best_lmm_pval")],FDR_threshold = 0.2)
+```
+
+GSEA with the 100 best ranked CpGs which did not return to normal: 
+
+```{r,warning=FALSE,message=F,error=TRUE}
+missMethyl_ORA(signif_cpgs = diff_CpGs_100$island,all_cpgs = exposure_final$island,db = "GO",FDR_threshold = 0.2)
+missMethyl_ORA(signif_cpgs = diff_CpGs_100$island,all_cpgs = exposure_final$island,db = "KEGG",FDR_threshold = 0.2)
+```
+
+
+```{r,warning=FALSE,message=F,error=TRUE}
+webgestalt_ORA(interest_genes_EntrezID = diff_CpGs_100$EntrezID,FDR_threshold = 0.2)
+webgestalt_GSEA(interest_genes_EntrezID = diff_CpGs_100[,c("EntrezID","best_lmm_pval")],FDR_threshold = 0.2)
+```
+

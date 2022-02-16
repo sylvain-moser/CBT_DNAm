@@ -1,0 +1,9 @@
+name: PD_exposure_r_illumina450k
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base
+  - r-dplyr
+  - bioconductor-illuminahumanmethylation450kanno.ilmn12.hg19=0.6.0
+

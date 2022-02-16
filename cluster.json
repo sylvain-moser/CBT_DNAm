@@ -1,0 +1,119 @@
+{
+    "__default__":
+    {
+        "mem": "8G",
+	    "excl": "psycl02",
+        "time": "1-0",
+        "stderr": "snakemake_logs/{rule}.err",
+        "stdout": "snakemake_logs/{rule}.out",
+        "jobname": "{rule}",
+        "cpus": "1"
+    },"compute_methylation_residuals":
+    {
+        "mem": "200G",
+        "cpus": "20"
+    },"compute_expression_residuals":
+    {
+        "mem": "10G",
+        "cpus": "1"
+    },"plot_cell_types":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}_{wildcards.condition}"
+    },"find_DMP":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}_{wildcards.start_idx}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}_{wildcards.start_idx}.out",
+        "jobname": "{rule}_{wildcards.condition}_{wildcards.start_idx}",
+        "cpus": "20",
+        "mem": "300G"
+    },"find_DMP_INT":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}_{wildcards.start_idx}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}_{wildcards.start_idx}.out",
+        "jobname": "{rule}_{wildcards.condition}_{wildcards.start_idx}",
+        "cpus": "20",
+        "mem": "300G"
+    },"make_LMM_qqplots":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}_{wildcards.condition}"
+    },"combine_diff_regulated_block_results":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}_{wildcards.condition}"
+    },"process_island_results":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}_{wildcards.condition}"
+    },"rank_cpgs":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}_{wildcards.condition}",
+        "cpus": "20",
+        "mem": "200G"
+
+    },"prepare_combp_input":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}"
+    
+    },"find_DMR":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}"
+    
+    },"annotate_DMR":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}"
+    
+    },"render_meth_profile":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.gene}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.gene}.out",
+        "jobname": "{rule}"
+    
+    },"render_expression_profile":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.gene}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.gene}.out",
+        "jobname": "{rule}"
+    
+    },"run_RF_classification_sumrank_remission":
+    {
+        "cpus": "10",
+        "mem": "100G"
+    },"render_report_exposure":
+    {
+        "mem": "50G"
+    },"render_report_therapy":
+    {
+        "mem": "50G"
+    },"candidate_analysis_expression":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}"
+    },"candidate_analysis":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}"
+    },"candidate_analysis_iurato_cpgs":
+    {
+        "stderr": "snakemake_logs/{rule}_{wildcards.condition}.err",
+        "stdout": "snakemake_logs/{rule}_{wildcards.condition}.out",
+        "jobname": "{rule}"
+    }
+}
+
+
